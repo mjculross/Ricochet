@@ -1,0 +1,581 @@
+#include "pebble_os.h"
+#include "pebble_app.h"
+
+#define MY_UUID {0x56, 0x91, 0x05, 0x7a, 0xda, 0x28, 0x4c, 0xee, 0x94, 0x09, 0x74, 0x7c, 0x5c, 0x2d, 0x3d, 0x95}
+PBL_APP_INFO(MY_UUID,
+	"ScrSaver", "Pebble Technology & KD5RXT",
+	1, 1, /* App major/minor version */
+	RESOURCE_ID_IMAGE_MENU_ICON,
+	APP_INFO_STANDARD_APP);
+
+Window window;
+
+
+#define TOTAL_TIME_DIGITS 6
+#define TOTAL_DATE_DIGITS 8
+
+typedef enum {TIME_ON_TOP_MODE = 0, DATE_ON_TOP_MODE, MODE_COUNT} DISPLAY_MODE;
+
+int display_mode = TIME_ON_TOP_MODE;
+
+bool night_enabled = false;
+bool clock_24h_style;
+
+int splash_timer = 3;
+
+int time_x_max;
+
+int time_x_delta;
+int time_y_delta;
+
+int time_x_offset;
+int time_y_offset;
+
+int date_x_max;
+
+int date_x_delta;
+int date_y_delta;
+
+int date_x_offset;
+int date_y_offset;
+
+BmpContainer time_digits_images[TOTAL_TIME_DIGITS];
+BmpContainer day_image;
+BmpContainer date_images[TOTAL_DATE_DIGITS];
+BmpContainer splash_image;
+
+const int BIG_DIGIT_IMAGE_RESOURCE_IDS[] =
+{
+   RESOURCE_ID_IMAGE_NUM_0,
+   RESOURCE_ID_IMAGE_NUM_1,
+   RESOURCE_ID_IMAGE_NUM_2,
+   RESOURCE_ID_IMAGE_NUM_3,
+   RESOURCE_ID_IMAGE_NUM_4,
+   RESOURCE_ID_IMAGE_NUM_5,
+   RESOURCE_ID_IMAGE_NUM_6,
+   RESOURCE_ID_IMAGE_NUM_7,
+   RESOURCE_ID_IMAGE_NUM_8,
+   RESOURCE_ID_IMAGE_NUM_9,
+};
+
+const int BIG_DIGIT_INV_IMAGE_RESOURCE_IDS[] =
+{
+   RESOURCE_ID_IMAGE_NUM_INV_0,
+   RESOURCE_ID_IMAGE_NUM_INV_1,
+   RESOURCE_ID_IMAGE_NUM_INV_2,
+   RESOURCE_ID_IMAGE_NUM_INV_3,
+   RESOURCE_ID_IMAGE_NUM_INV_4,
+   RESOURCE_ID_IMAGE_NUM_INV_5,
+   RESOURCE_ID_IMAGE_NUM_INV_6,
+   RESOURCE_ID_IMAGE_NUM_INV_7,
+   RESOURCE_ID_IMAGE_NUM_INV_8,
+   RESOURCE_ID_IMAGE_NUM_INV_9,
+};
+
+
+const int DATENUM_IMAGE_RESOURCE_IDS[] =
+{
+   RESOURCE_ID_IMAGE_DATENUM_0,
+   RESOURCE_ID_IMAGE_DATENUM_1,
+   RESOURCE_ID_IMAGE_DATENUM_2,
+   RESOURCE_ID_IMAGE_DATENUM_3,
+   RESOURCE_ID_IMAGE_DATENUM_4,
+   RESOURCE_ID_IMAGE_DATENUM_5,
+   RESOURCE_ID_IMAGE_DATENUM_6,
+   RESOURCE_ID_IMAGE_DATENUM_7,
+   RESOURCE_ID_IMAGE_DATENUM_8,
+   RESOURCE_ID_IMAGE_DATENUM_9,
+};
+
+const int DATENUM_INV_IMAGE_RESOURCE_IDS[] =
+{
+   RESOURCE_ID_IMAGE_DATENUM_INV_0,
+   RESOURCE_ID_IMAGE_DATENUM_INV_1,
+   RESOURCE_ID_IMAGE_DATENUM_INV_2,
+   RESOURCE_ID_IMAGE_DATENUM_INV_3,
+   RESOURCE_ID_IMAGE_DATENUM_INV_4,
+   RESOURCE_ID_IMAGE_DATENUM_INV_5,
+   RESOURCE_ID_IMAGE_DATENUM_INV_6,
+   RESOURCE_ID_IMAGE_DATENUM_INV_7,
+   RESOURCE_ID_IMAGE_DATENUM_INV_8,
+   RESOURCE_ID_IMAGE_DATENUM_INV_9,
+};
+
+const int DAY_IMAGE_RESOURCE_IDS[] =
+{
+   RESOURCE_ID_IMAGE_DAY_SUN,
+   RESOURCE_ID_IMAGE_DAY_MON,
+   RESOURCE_ID_IMAGE_DAY_TUE,
+   RESOURCE_ID_IMAGE_DAY_WED,
+   RESOURCE_ID_IMAGE_DAY_THU,
+   RESOURCE_ID_IMAGE_DAY_FRI,
+   RESOURCE_ID_IMAGE_DAY_SAT,
+};
+
+
+const int DAY_INV_IMAGE_RESOURCE_IDS[] =
+{
+   RESOURCE_ID_IMAGE_DAY_INV_SUN,
+   RESOURCE_ID_IMAGE_DAY_INV_MON,
+   RESOURCE_ID_IMAGE_DAY_INV_TUE,
+   RESOURCE_ID_IMAGE_DAY_INV_WED,
+   RESOURCE_ID_IMAGE_DAY_INV_THU,
+   RESOURCE_ID_IMAGE_DAY_INV_FRI,
+   RESOURCE_ID_IMAGE_DAY_INV_SAT,
+};
+
+
+void click_config_provider(ClickConfig **config, Window *window);
+void down_single_click_handler(ClickRecognizerRef recognizer, Window *window);
+void handle_deinit(AppContextRef ctx);
+void handle_init(AppContextRef ctx);
+void handle_second_tick(AppContextRef ctx, PebbleTickEvent *t);
+void select_long_click_handler(ClickRecognizerRef recognizer, Window *window);
+void select_long_release_handler(ClickRecognizerRef recognizer, Window *window);
+void select_single_click_handler(ClickRecognizerRef recognizer, Window *window);
+void set_container_image(BmpContainer *bmp_container, const int resource_id, GPoint origin);
+void up_single_click_handler(ClickRecognizerRef recognizer, Window *window);
+void update_date(PblTm *current_time);
+void update_time(PblTm *current_time);
+
+
+void click_config_provider(ClickConfig **config, Window *window)
+{
+   (void)window;
+
+   config[BUTTON_ID_SELECT]->click.handler = (ClickHandler) select_single_click_handler;
+
+   config[BUTTON_ID_SELECT]->long_click.handler = (ClickHandler) select_long_click_handler;
+   config[BUTTON_ID_SELECT]->long_click.release_handler = (ClickHandler) select_long_release_handler;
+
+   config[BUTTON_ID_UP]->click.handler = (ClickHandler) up_single_click_handler;
+   config[BUTTON_ID_UP]->click.repeat_interval_ms = 100;
+
+   config[BUTTON_ID_DOWN]->click.handler = (ClickHandler) down_single_click_handler;
+   config[BUTTON_ID_DOWN]->click.repeat_interval_ms = 100;
+}  // click_config_provider()
+
+
+void down_single_click_handler(ClickRecognizerRef recognizer, Window *window)
+{
+   (void)recognizer;
+   (void)window;
+}  // down_single_click_handler()
+
+
+void handle_deinit(AppContextRef ctx)
+{
+   (void)ctx;
+
+   for (int i = 0; i < TOTAL_TIME_DIGITS; i++)
+   {
+      bmp_deinit_container(&time_digits_images[i]);
+   }
+   for (int i = 0; i < TOTAL_DATE_DIGITS; i++)
+   {
+      bmp_deinit_container(&date_images[i]);
+   }
+   bmp_deinit_container(&day_image);
+   bmp_deinit_container(&splash_image);
+}  // handle_deinit()
+
+
+void handle_init(AppContextRef ctx)
+{
+   PblTm time_now;
+
+   get_time(&time_now);
+   (void)ctx;
+
+   // version 1.1 of SDK requires vars to be intialized manually
+   // START manual var intialization
+
+   display_mode = TIME_ON_TOP_MODE;
+
+   night_enabled = false;
+
+   splash_timer = 3;
+
+   if (clock_is_24h_style())
+   {
+      clock_24h_style = true;
+      time_x_max = 93;
+   }
+   else
+   {
+      clock_24h_style = false;
+      time_x_max = 103;
+   }
+
+   time_x_offset = 20;
+   time_y_offset = 75;
+
+   time_x_delta = 2;
+   time_y_delta = 3;
+
+   date_x_max = 104;
+   date_x_offset = 0;
+   date_y_offset = 10;
+
+   date_x_delta = -2;
+   date_y_delta = -3;
+   // END manual var intialization
+
+   window_init(&window, "ScrSaver");
+   window_set_fullscreen(&window, true);
+   window_stack_push(&window, true /* Animated */);
+
+   resource_init_current_app(&APP_RESOURCES);
+
+   // Attach custom button functionality
+   window_set_click_config_provider(&window, (ClickConfigProvider) click_config_provider);
+
+   // version 1.1 of SDK requires vars to be intialized manually
+   // START manual var intialization
+   for (int i = 0; i < TOTAL_TIME_DIGITS; i++)
+   {
+      bmp_init_container(RESOURCE_ID_IMAGE_NUM_BLANK, &time_digits_images[i]);
+   }
+   for (int i = 0; i < TOTAL_DATE_DIGITS; i++)
+   {
+      bmp_init_container(RESOURCE_ID_IMAGE_DATENUM_SLASH, &date_images[i]);
+   }
+   bmp_init_container(RESOURCE_ID_IMAGE_SPLASH, &splash_image);
+   bmp_init_container(RESOURCE_ID_IMAGE_DAY_SUN, &day_image);
+
+   // END manual var intialization
+
+}  // handle_init()
+
+
+void handle_second_tick(AppContextRef ctx, PebbleTickEvent *t)
+{
+   (void)ctx;
+
+   if (splash_timer > 0)
+   {
+      splash_timer--;
+
+      if (splash_timer != 0)
+      {
+         set_container_image(&splash_image, RESOURCE_ID_IMAGE_SPLASH, GPoint(0, 0));
+         return;
+      }
+      else
+      {
+         layer_remove_from_parent(&splash_image.layer.layer);
+         bmp_deinit_container(&splash_image);
+      }
+   }
+
+   switch (display_mode)
+   {
+      case TIME_ON_TOP_MODE:
+         update_date(t->tick_time);
+         update_time(t->tick_time);
+      break;
+
+      case DATE_ON_TOP_MODE:
+         update_time(t->tick_time);
+         update_date(t->tick_time);
+      break;
+   }
+}  // handle_second_tick()
+
+
+void select_long_click_handler(ClickRecognizerRef recognizer, Window *window)
+{
+   (void)recognizer;
+   (void)window;
+
+   if (splash_timer == 0)
+   {
+      night_enabled = !night_enabled;
+   }
+}  // select_long_click_handler()
+
+
+void select_long_release_handler(ClickRecognizerRef recognizer, Window *window)
+{
+   (void)recognizer;
+   (void)window;
+}  // select_long_release_handler()
+
+
+void select_single_click_handler(ClickRecognizerRef recognizer, Window *window)
+{
+   (void)recognizer;
+   (void)window;
+
+   display_mode++;
+   if (display_mode == MODE_COUNT)
+   {
+      display_mode = TIME_ON_TOP_MODE;
+   }
+}  // select_single_click_handler()
+
+
+void set_container_image(BmpContainer *bmp_container, const int resource_id, GPoint origin)
+{
+   layer_remove_from_parent(&bmp_container->layer.layer);
+   bmp_deinit_container(bmp_container);
+
+   bmp_init_container(resource_id, bmp_container);
+
+   GRect frame = layer_get_frame(&bmp_container->layer.layer);
+   frame.origin.x = origin.x;
+   frame.origin.y = origin.y;
+   layer_set_frame(&bmp_container->layer.layer, frame);
+
+   layer_add_child(&window.layer, &bmp_container->layer.layer);
+}  // set_container_image()
+
+
+void up_single_click_handler(ClickRecognizerRef recognizer, Window *window)
+{
+   (void)recognizer;
+   (void)window;
+}  // up_single_click_handler()
+
+
+void update_date(PblTm *current_time)
+{
+   float x, y;
+
+   // total date field is 104w x 39h
+   if ((date_x_offset + date_x_delta) < 0)
+   {
+      // generate a pseudo random number from 2, 4, & 6
+      x =  (sin_lookup (current_time->tm_hour + current_time->tm_min + current_time->tm_sec + 3)) * 1000;
+      date_x_delta = (int) x;
+      date_x_delta = ((date_x_delta % 3) + 1) * 2;
+   }
+   else
+   {
+      if ((date_x_offset + date_x_delta + date_x_max) >=144)
+      {
+         // generate a pseudo random number from -2, -4, & -6
+         x =  (cos_lookup (current_time->tm_hour + current_time->tm_min + current_time->tm_sec + 7)) * 1000;
+         date_x_delta = (int) x;
+         date_x_delta = ((date_x_delta % 3) + 1) * 2;
+         date_x_delta = -date_x_delta;
+      }
+   }
+
+   if ((date_y_offset + date_y_delta) < 0)
+   {
+      // generate a pseudo random number from 4, 8, & 12
+      y =  (cos_lookup (current_time->tm_hour + current_time->tm_min + current_time->tm_sec + 9)) * 1000;
+      date_y_delta = (int) y;
+      date_y_delta = ((date_y_delta % 3) + 1) * 4;
+   }
+   else
+   {
+      if ((date_y_offset + date_y_delta + 41) >= 168)
+      {
+         // generate a pseudo random number from -4, -8, & -12
+         y =  (sin_lookup (current_time->tm_hour + current_time->tm_min + current_time->tm_sec + 11)) * 1000;
+         date_y_delta = (int) y;
+         date_y_delta = ((date_y_delta % 3) + 1) * 4;
+         date_y_delta = -date_y_delta;
+      }
+   }
+
+   date_x_offset += date_x_delta;
+   date_y_offset += date_y_delta;
+
+   // display date
+   if (night_enabled == false)
+   {
+      set_container_image(&day_image, DAY_IMAGE_RESOURCE_IDS[current_time->tm_wday], GPoint(date_x_offset + 30, date_y_offset));
+
+      set_container_image(&date_images[0], DATENUM_IMAGE_RESOURCE_IDS[(current_time->tm_mon + 1) / 10], GPoint(date_x_offset, date_y_offset + 23));
+      set_container_image(&date_images[1], DATENUM_IMAGE_RESOURCE_IDS[(current_time->tm_mon + 1) % 10], GPoint(date_x_offset + 13, date_y_offset + 23));
+      set_container_image(&date_images[2], RESOURCE_ID_IMAGE_DATENUM_SLASH, GPoint(date_x_offset + 26, date_y_offset + 23));
+      set_container_image(&date_images[3], DATENUM_IMAGE_RESOURCE_IDS[current_time->tm_mday / 10], GPoint(date_x_offset + 39, date_y_offset + 23));
+      set_container_image(&date_images[4], DATENUM_IMAGE_RESOURCE_IDS[current_time->tm_mday % 10], GPoint(date_x_offset + 52, date_y_offset + 23));
+      set_container_image(&date_images[5], RESOURCE_ID_IMAGE_DATENUM_SLASH, GPoint(date_x_offset + 65, date_y_offset + 23));
+      set_container_image(&date_images[6], DATENUM_IMAGE_RESOURCE_IDS[(current_time->tm_year / 10) % 10], GPoint(date_x_offset + 78, date_y_offset + 23));
+      set_container_image(&date_images[7], DATENUM_IMAGE_RESOURCE_IDS[current_time->tm_year % 10], GPoint(date_x_offset + 91, date_y_offset + 23));
+   }
+   else
+   {
+      set_container_image(&day_image, DAY_INV_IMAGE_RESOURCE_IDS[current_time->tm_wday], GPoint(date_x_offset + 30, date_y_offset));
+
+      set_container_image(&date_images[0], DATENUM_INV_IMAGE_RESOURCE_IDS[(current_time->tm_mon + 1) / 10], GPoint(date_x_offset, date_y_offset + 23));
+      set_container_image(&date_images[1], DATENUM_INV_IMAGE_RESOURCE_IDS[(current_time->tm_mon + 1) % 10], GPoint(date_x_offset + 13, date_y_offset + 23));
+      set_container_image(&date_images[2], RESOURCE_ID_IMAGE_DATENUM_INV_SLASH, GPoint(date_x_offset + 26, date_y_offset + 23));
+      set_container_image(&date_images[3], DATENUM_INV_IMAGE_RESOURCE_IDS[current_time->tm_mday / 10], GPoint(date_x_offset + 39, date_y_offset + 23));
+      set_container_image(&date_images[4], DATENUM_INV_IMAGE_RESOURCE_IDS[current_time->tm_mday % 10], GPoint(date_x_offset + 52, date_y_offset + 23));
+      set_container_image(&date_images[5], RESOURCE_ID_IMAGE_DATENUM_INV_SLASH, GPoint(date_x_offset + 65, date_y_offset + 23));
+      set_container_image(&date_images[6], DATENUM_INV_IMAGE_RESOURCE_IDS[(current_time->tm_year / 10) % 10], GPoint(date_x_offset + 78, date_y_offset + 23));
+      set_container_image(&date_images[7], DATENUM_INV_IMAGE_RESOURCE_IDS[current_time->tm_year % 10], GPoint(date_x_offset + 91, date_y_offset + 23));
+   }
+}  // update_date()
+
+
+void update_time(PblTm *current_time)
+{
+   float x, y;
+
+   // total time field is 103w x 52h for 12-hour clock & 93w x 52h for 24-hour clock
+   if ((time_x_offset + time_x_delta) < 0)
+   {
+      // generate a pseudo random number from 2, 4, & 6
+      x =  (sin_lookup (current_time->tm_hour + current_time->tm_min + current_time->tm_sec + 19)) * 1000;
+      time_x_delta = (int) x;
+      time_x_delta = ((time_x_delta % 3) + 1) * 2;
+   }
+   else
+   {
+      if ((time_x_offset + time_x_delta + time_x_max) >=144)
+      {
+         // generate a pseudo random number from -2, -4, & -6
+         x =  (cos_lookup (current_time->tm_hour + current_time->tm_min + current_time->tm_sec + 37)) * 1000;
+         time_x_delta = (int) x;
+         time_x_delta = ((time_x_delta % 3) + 1) * 2;
+         time_x_delta = -time_x_delta;
+      }
+   }
+
+   if ((time_y_offset + time_y_delta) < 0)
+   {
+      // generate a pseudo random number from 3, 6, & 9
+      y =  (cos_lookup (current_time->tm_hour + current_time->tm_min + current_time->tm_sec + 43)) * 1000;
+      time_y_delta = (int) y;
+      time_y_delta = ((time_y_delta % 3) + 1) * 3;
+   }
+   else
+   {
+      if ((time_y_offset + time_y_delta + 52) >= 168)
+      {
+         // generate a pseudo random number from -3, -6, & -9
+         y =  (sin_lookup (current_time->tm_hour + current_time->tm_min + current_time->tm_sec + 53)) * 1000;
+         time_y_delta = (int) y;
+         time_y_delta = ((time_y_delta % 3) + 1) * 3;
+         time_y_delta = -time_y_delta;
+      }
+   }
+
+   time_x_offset += time_x_delta;
+   time_y_offset += time_y_delta;
+
+   // display time hour
+   if (clock_24h_style)
+   {
+      if (night_enabled == false)
+      {
+         set_container_image(&time_digits_images[0], BIG_DIGIT_IMAGE_RESOURCE_IDS[current_time->tm_hour / 10], GPoint(time_x_offset, time_y_offset));
+         set_container_image(&time_digits_images[1], BIG_DIGIT_IMAGE_RESOURCE_IDS[current_time->tm_hour % 10], GPoint(21 + time_x_offset, time_y_offset));
+      }
+      else
+      {
+         set_container_image(&time_digits_images[0], BIG_DIGIT_INV_IMAGE_RESOURCE_IDS[current_time->tm_hour / 10], GPoint(time_x_offset, time_y_offset));
+         set_container_image(&time_digits_images[1], BIG_DIGIT_INV_IMAGE_RESOURCE_IDS[current_time->tm_hour % 10], GPoint(21 + time_x_offset, time_y_offset));
+      }
+   }
+   else
+   {
+      // display AM/PM
+      if (current_time->tm_hour >= 12)
+      {
+         if (night_enabled == false)
+         {
+            set_container_image(&time_digits_images[5], RESOURCE_ID_IMAGE_PM_MODE, GPoint(93 + time_x_offset, time_y_offset));
+         }
+         else
+         {
+            set_container_image(&time_digits_images[5], RESOURCE_ID_IMAGE_INV_PM_MODE, GPoint(93 + time_x_offset, time_y_offset));
+         }
+      }
+      else
+      {
+         if (night_enabled == false)
+         {
+            set_container_image(&time_digits_images[5], RESOURCE_ID_IMAGE_AM_MODE, GPoint(93 + time_x_offset, time_y_offset));
+         }
+         else
+         {
+            set_container_image(&time_digits_images[5], RESOURCE_ID_IMAGE_INV_AM_MODE, GPoint(93 + time_x_offset, time_y_offset));
+         }
+      }
+
+      if ((current_time->tm_hour % 12) == 0)
+      {
+         if (night_enabled == false)
+         {
+            set_container_image(&time_digits_images[0], BIG_DIGIT_IMAGE_RESOURCE_IDS[1], GPoint(time_x_offset, time_y_offset));
+            set_container_image(&time_digits_images[1], BIG_DIGIT_IMAGE_RESOURCE_IDS[2], GPoint(21 + time_x_offset, time_y_offset));
+         }
+         else
+         {
+            set_container_image(&time_digits_images[0], BIG_DIGIT_INV_IMAGE_RESOURCE_IDS[1], GPoint(time_x_offset, time_y_offset));
+            set_container_image(&time_digits_images[1], BIG_DIGIT_INV_IMAGE_RESOURCE_IDS[2], GPoint(21 + time_x_offset, time_y_offset));
+         }
+      }
+      else
+      {
+         if (night_enabled == false)
+         {
+            set_container_image(&time_digits_images[0], BIG_DIGIT_IMAGE_RESOURCE_IDS[(current_time->tm_hour % 12) / 10], GPoint(time_x_offset, time_y_offset));
+            set_container_image(&time_digits_images[1], BIG_DIGIT_IMAGE_RESOURCE_IDS[(current_time->tm_hour % 12) % 10], GPoint(21 + time_x_offset, time_y_offset));
+         }
+         else
+         {
+            set_container_image(&time_digits_images[0], BIG_DIGIT_INV_IMAGE_RESOURCE_IDS[(current_time->tm_hour % 12) / 10], GPoint(time_x_offset, time_y_offset));
+            set_container_image(&time_digits_images[1], BIG_DIGIT_INV_IMAGE_RESOURCE_IDS[(current_time->tm_hour % 12) % 10], GPoint(21 + time_x_offset, time_y_offset));
+         }
+
+         if ((current_time->tm_hour % 12) < 10)
+         {
+            if (night_enabled == false)
+            {
+               set_container_image(&time_digits_images[0], RESOURCE_ID_IMAGE_NUM_BLANK, GPoint(time_x_offset, time_y_offset));
+            }
+            else
+            {
+               set_container_image(&time_digits_images[0], RESOURCE_ID_IMAGE_NUM_INV_BLANK, GPoint(time_x_offset, time_y_offset));
+            }
+         }
+      }
+   }
+
+   // display colon & time minute
+   if (night_enabled == false)
+   {
+      set_container_image(&time_digits_images[2], RESOURCE_ID_IMAGE_COLON, GPoint(42 + time_x_offset, time_y_offset));
+      set_container_image(&time_digits_images[3], BIG_DIGIT_IMAGE_RESOURCE_IDS[current_time->tm_min / 10], GPoint(51 + time_x_offset, time_y_offset));
+      set_container_image(&time_digits_images[4], BIG_DIGIT_IMAGE_RESOURCE_IDS[current_time->tm_min % 10], GPoint(72 + time_x_offset, time_y_offset));
+   }
+   else
+   {
+      set_container_image(&time_digits_images[2], RESOURCE_ID_IMAGE_INV_COLON, GPoint(42 + time_x_offset, time_y_offset));
+      set_container_image(&time_digits_images[3], BIG_DIGIT_INV_IMAGE_RESOURCE_IDS[current_time->tm_min / 10], GPoint(51 + time_x_offset, time_y_offset));
+      set_container_image(&time_digits_images[4], BIG_DIGIT_INV_IMAGE_RESOURCE_IDS[current_time->tm_min % 10], GPoint(72 + time_x_offset, time_y_offset));
+   }
+}  // update_time()
+
+
+void pbl_main(void *params)
+{
+   PebbleAppHandlers handlers =
+   {
+      .init_handler = &handle_init,
+      .deinit_handler = &handle_deinit,
+
+      .tick_info =
+      {
+         .tick_handler = &handle_second_tick,
+         .tick_units = SECOND_UNIT
+      }
+   };
+
+   app_event_loop(params, &handlers);
+}  // pbl_main()
+
+
+
+
+
+
+
