@@ -10,6 +10,18 @@
 
    {
       "type": "png",
+      "defName": "IMAGE_BLACK_BACK",
+      "file": "images/back_blk.png"
+   },
+
+   {
+      "type": "png",
+      "defName": "IMAGE_WHITE_BACK",
+      "file": "images/back_wht.png"
+   },
+
+   {
+      "type": "png",
       "defName": "IMAGE_SPLASH",
       "file": "images/splash.png"
    },
