@@ -4,7 +4,7 @@
 #define MY_UUID {0x7e, 0x0a, 0x8d, 0xaa, 0x84, 0x8f, 0x48, 0xe0, 0x9c, 0x44, 0x2d, 0x27, 0xb2, 0x75, 0xc7, 0xdb}
 PBL_APP_INFO(MY_UUID,
 	"Ricochet", "Pebble Technology & KD5RXT",
-	1, 0, /* App major/minor version */
+	1, 1, /* App major/minor version */
 	RESOURCE_ID_IMAGE_MENU_ICON,
 	APP_INFO_STANDARD_APP);
 
@@ -14,29 +14,29 @@ Window window;
 #define TOTAL_TIME_DIGITS 6
 #define TOTAL_DATE_DIGITS 8
 
-bool night_enabled = false;
+bool night_enabled = true;
 bool clock_24h_style;
 bool date_month_first = true;
 bool time_on_top = false;
 
 int splash_timer = 3;
-int freeze_timer;
+int freeze_timer = 5;
 
-int time_x_max;
+int time_x_max = 0;
 
-int time_x_delta;
-int time_y_delta;
+int time_x_delta = 2;
+int time_y_delta = 3;
 
-int time_x_offset;
-int time_y_offset;
+int time_x_offset = 0;
+int time_y_offset = 0;
 
-int date_x_max;
+int date_x_max = 104;
 
-int date_x_delta;
-int date_y_delta;
+int date_x_delta = -3;
+int date_y_delta = -2;
 
-int date_x_offset;
-int date_y_offset;
+int date_x_offset = 0;
+int date_y_offset = 0;
 
 BmpContainer time_digits_images[TOTAL_TIME_DIGITS];
 BmpContainer day_image;
@@ -204,7 +204,7 @@ void handle_init(AppContextRef ctx)
    // version 1.1 of SDK requires vars to be intialized manually
    // START manual var intialization
 
-   night_enabled = false;
+   night_enabled = true;
    date_month_first = true;
    time_on_top = false;
 
@@ -245,6 +245,9 @@ void handle_init(AppContextRef ctx)
    // Attach custom button functionality
    window_set_click_config_provider(&window, (ClickConfigProvider) click_config_provider);
 
+   // seed the random number generator
+   srand(time(NULL));
+
    // version 1.1 of SDK requires vars to be intialized manually
    // START manual var intialization
    for (int i = 0; i < TOTAL_TIME_DIGITS; i++)
@@ -278,8 +281,9 @@ void handle_second_tick(AppContextRef ctx, PebbleTickEvent *t)
       }
       else
       {
-         layer_remove_from_parent(&splash_image.layer.layer);
-         bmp_deinit_container(&splash_image);
+//         layer_remove_from_parent(&splash_image.layer.layer);
+//         bmp_deinit_container(&splash_image);
+         set_container_image(&splash_image, RESOURCE_ID_IMAGE_BLACK_BACK, GPoint(0, 0));
       }
    }
 
@@ -301,6 +305,15 @@ void select_long_click_handler(ClickRecognizerRef recognizer, Window *window)
    if (splash_timer == 0)
    {
       night_enabled = !night_enabled;
+
+      if (night_enabled)
+      {
+         set_container_image(&splash_image, RESOURCE_ID_IMAGE_BLACK_BACK, GPoint(0, 0));
+      }
+      else
+      {
+         set_container_image(&splash_image, RESOURCE_ID_IMAGE_WHITE_BACK, GPoint(0, 0));
+      }
    }
 
    get_time(&current_time);
@@ -451,8 +464,6 @@ void update_display(PblTm *current_time, bool move)
 
 void update_moves(PblTm *current_time)
 {
-   float x, y;
-
    date_x_offset += date_x_delta;
    date_y_offset += date_y_delta;
 
@@ -463,18 +474,14 @@ void update_moves(PblTm *current_time)
    if ((date_x_offset + date_x_delta) < 0)
    {
       // generate a pseudo random number from 2, 4, & 6
-      x =  (sin_lookup (current_time->tm_hour + current_time->tm_min + current_time->tm_sec + 3)) * 1000;
-      date_x_delta = (int) x;
-      date_x_delta = ((date_x_delta % 3) + 1) * 2;
+      date_x_delta = ((rand() % 3) + 1) * 2;
    }
    else
    {
       if ((date_x_offset + date_x_delta + date_x_max) >= 144)
       {
          // generate a pseudo random number from -2, -4, & -6
-         x =  (cos_lookup (current_time->tm_hour + current_time->tm_min + current_time->tm_sec + 7)) * 1000;
-         date_x_delta = (int) x;
-         date_x_delta = ((date_x_delta % 3) + 1) * 2;
+         date_x_delta = ((rand() % 3) + 1) * 2;
          date_x_delta = -date_x_delta;
       }
    }
@@ -483,18 +490,14 @@ void update_moves(PblTm *current_time)
    if ((time_x_offset + time_x_delta) < 0)
    {
       // generate a pseudo random number from 2, 4, & 6
-      x =  (sin_lookup (current_time->tm_hour + current_time->tm_min + current_time->tm_sec + 19)) * 1000;
-      time_x_delta = (int) x;
-      time_x_delta = ((time_x_delta % 3) + 1) * 2;
+      time_x_delta = ((rand() % 3) + 1) * 2;
    }
    else
    {
       if ((time_x_offset + time_x_delta + time_x_max) >= 144)
       {
          // generate a pseudo random number from -2, -4, & -6
-         x =  (cos_lookup (current_time->tm_hour + current_time->tm_min + current_time->tm_sec + 37)) * 1000;
-         time_x_delta = (int) x;
-         time_x_delta = ((time_x_delta % 3) + 1) * 2;
+         time_x_delta = ((rand() % 3) + 1) * 2;
          time_x_delta = -time_x_delta;
       }
    }
@@ -504,32 +507,24 @@ void update_moves(PblTm *current_time)
       if ((time_y_offset + time_y_delta) < 0)
       {
          // generate a pseudo random number from 3, 6, & 9
-         y =  (sin_lookup (current_time->tm_hour + current_time->tm_min + current_time->tm_sec + 53)) * 1000;
-         time_y_delta = (int) y;
-         time_y_delta = ((time_y_delta % 3) + 1) * 3;
+         time_y_delta = ((rand() % 3) + 1) * 3;
       }
 
       if ((date_y_offset + date_y_delta + 39) >= 168)
       {
          // generate a pseudo random number from -4, -8, & -12
-         y =  (sin_lookup (current_time->tm_hour + current_time->tm_min + current_time->tm_sec + 11)) * 1000;
-         date_y_delta = (int) y;
-         date_y_delta = ((date_y_delta % 3) + 1) * 4;
+         date_y_delta = ((rand() % 3) + 1) * 4;
          date_y_delta = -date_y_delta;
       }
 
       if (((date_y_offset + date_y_delta) - (time_y_offset + time_y_delta)) <= 52)
       {
          // generate a pseudo random number from -3, -6, & -9
-         y =  (sin_lookup (current_time->tm_hour + current_time->tm_min + current_time->tm_sec + 53)) * 1000;
-         time_y_delta = (int) y;
-         time_y_delta = ((time_y_delta % 3) + 1) * 3;
+         time_y_delta = ((rand() % 3) + 1) * 3;
          time_y_delta = -time_y_delta;
 
          // generate a pseudo random number from 4, 8, & 12
-         y =  (cos_lookup (current_time->tm_hour + current_time->tm_min + current_time->tm_sec + 9)) * 1000;
-         date_y_delta = (int) y;
-         date_y_delta = ((date_y_delta % 3) + 1) * 4;
+         date_y_delta = ((rand() % 3) + 1) * 4;
       }
    }
    else
@@ -537,31 +532,23 @@ void update_moves(PblTm *current_time)
       if ((date_y_offset + date_y_delta) < 0)
       {
          // generate a pseudo random number from 4, 8, & 12
-         y =  (sin_lookup (current_time->tm_hour + current_time->tm_min + current_time->tm_sec + 11)) * 1000;
-         date_y_delta = (int) y;
-         date_y_delta = ((date_y_delta % 3) + 1) * 4;
+         date_y_delta = ((rand() % 3) + 1) * 4;
       }
 
       if ((time_y_offset + time_y_delta + 52) >= 168)
       {
          // generate a pseudo random number from -3, -6, & -9
-         y =  (cos_lookup (current_time->tm_hour + current_time->tm_min + current_time->tm_sec + 9)) * 1000;
-         time_y_delta = (int) y;
-         time_y_delta = ((time_y_delta % 3) + 1) * 3;
+         time_y_delta = ((rand() % 3) + 1) * 3;
          time_y_delta = -time_y_delta;
       }
 
       if (((time_y_offset + time_y_delta) - (date_y_offset + date_y_delta)) <= 39)
       {
          // generate a pseudo random number from 3, 6, & 9
-         y =  (sin_lookup (current_time->tm_hour + current_time->tm_min + current_time->tm_sec + 53)) * 1000;
-         time_y_delta = (int) y;
-         time_y_delta = ((time_y_delta % 3) + 1) * 3;
+         time_y_delta = ((rand() % 3) + 1) * 3;
 
          // generate a pseudo random number from -4, -8, & -12
-         y =  (cos_lookup (current_time->tm_hour + current_time->tm_min + current_time->tm_sec + 9)) * 1000;
-         date_y_delta = (int) y;
-         date_y_delta = ((date_y_delta % 3) + 1) * 4;
+         date_y_delta = ((rand() % 3) + 1) * 4;
          date_y_delta = -date_y_delta;
       }
    }

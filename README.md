@@ -10,9 +10,15 @@ NOTE: to allow full use of the buttons, ScrSaver
    as "Settings" on the Pebble), not as a
    watchface . . . it just displays a watchface
 
-Features (v 1.0):
-- selectable black-on-white (default) or
-  white-on-black display
+Fixes (v 1.1):
+- made white-on-black screen fully black (instead
+  just black blocks...should have been that way
+  from the beginning, but coded it wrong !!)
+- made white-on-black the default screen
+
+Features (v 1.1):
+- selectable white-on-black (default) or
+  black-on-white display
 - selectable date-on_top display mode (default)
   & time-on-top display mode
 - selectable 12/24 hour format time (defaults to
